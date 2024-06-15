@@ -1,0 +1,18 @@
+<html>
+  <head>
+    <title>instant-playback-sync</title>
+  </head>
+  <body>
+    <center>
+      <h1>instant-playback-sync</h1>
+
+      <hr>
+
+      <button id="newRoomBtn">新しい部屋を作る</button>
+    </center>
+
+    <script>
+      document.getElementById("newRoomBtn").onclick = () => window.location.href = `${window.location.origin}/r/${Math.random().toString(36).slice(-8)}`;
+    </script>
+  </body>
+</html>

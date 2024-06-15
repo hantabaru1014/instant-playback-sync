@@ -1,0 +1,60 @@
+<html>
+  <head>
+    <title>instant-playback-sync</title>
+  </head>
+  <body>
+    <center>
+      <h1>instant-playback-sync</h1>
+
+      <hr>
+
+      <div id="videoInfo" style="display: none;">
+        <p>下のURLを開いて、</p>
+        <a id="videoUrl" href="" target="_blank"></a>
+      </div>
+
+      <div id="bookmarklet">
+        <p>下のブックマークレットをブックマークバーにドラッグして登録ください。そして、動画を開いたタブで実行してください。</p>
+        <a id="bookmarklet-atag" href="">psync-部屋に入る</a>
+      </div>
+      <div id="bookmarklet2">
+        <p>もしくは、Copyボタンを押してコピーされたテキストを動画を開いたタブのアドレスバーに張り付けて、先頭の「/」を消してエンターしてください。</p>
+        <input id="userScript" type="text">
+        <button id="copyScript">Copy</button>
+      </div>
+    </center>
+
+    <script>
+      const getRoomId = () => window.location.pathname.split("/")[2];
+      const fetchRoomInfo = async () => {
+        const response = await fetch(`${window.location.origin}/api/rooms/${getRoomId()}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch room info");
+        }
+        return await response.json();
+      }
+      fetchRoomInfo().then(roomInfo => {
+        const videoUrlElm = document.getElementById("videoUrl");
+        console.log(roomInfo);
+        videoUrlElm.href = roomInfo.videoUrl;
+        videoUrlElm.innerText = roomInfo.videoUrl;
+
+        document.getElementById("videoInfo").style.display = "block";
+      }).catch(console.error);
+
+      const userScirptInput = document.getElementById("userScript");
+
+      const scriptUrl = encodeURI(`${window.location.origin}/i.js`).replaceAll(':', '%3A').replaceAll('/', '%2F');
+      const encodedRoomId = encodeURI(window.location.pathname.split("/")[2]); // 想定: /r/:roomId
+      const scriptText = `javascript:(function()%7Bimport('${scriptUrl}').then(m%3D%3E%20m.default('${window.location.host}','${encodedRoomId}'))%7D)()`;
+
+      userScirptInput.value = `/${scriptText}`;
+      document.getElementById("bookmarklet-atag").href = scriptText;
+
+      document.getElementById("copyScript").onclick = function () {
+        userScirptInput.select();
+        document.execCommand("copy");
+      };
+    </script>
+  </body>
+</html>
