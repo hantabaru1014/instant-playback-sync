@@ -3,7 +3,6 @@ package app
 import (
 	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/hantabaru1014/instant-playback-sync/dto"
 	"github.com/labstack/echo/v4"
@@ -58,14 +57,11 @@ func (s *Server) makeMelody() {
 }
 
 func (s *Server) Run(address string) {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
 	e := echo.New()
 	s.makeMelody()
 
 	e.Use(slogecho.NewWithFilters(
-		logger,
+		slog.Default(),
 		slogecho.IgnorePath("/live", "/ready"), // k8s liveness and readiness probes
 	))
 	e.Use(middleware.Recover())
