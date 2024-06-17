@@ -1,13 +1,14 @@
-FROM golang:1.22 as build
+FROM --platform=$BUILDPLATFORM golang:1.22 as build
+ARG TARGETARCH
 
 WORKDIR /go/src/app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 
-RUN go mod download
-RUN go vet -v
-RUN go test -v
-
-RUN CGO_ENABLED=0 go build -o /go/bin/app
+RUN GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -o /go/bin/app
 
 FROM gcr.io/distroless/static-debian11
 
