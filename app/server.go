@@ -48,6 +48,7 @@ func (s *Server) makeMelody() {
 		if err != nil {
 			return
 		}
+		slog.Debug("handle WS message", "msg", string(msg))
 		if ar, exists := ss.Get(ROOM_KEY); exists {
 			r := ar.(*Room)
 			r.handleMessage(cmd, msg, ss)

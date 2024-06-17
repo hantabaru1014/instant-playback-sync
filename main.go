@@ -8,7 +8,20 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	loglvl := slog.LevelInfo
+	switch os.Getenv("LOG_LEVEL") {
+	case "DEBUG":
+		loglvl = slog.LevelDebug
+	case "INFO":
+		loglvl = slog.LevelInfo
+	case "WARN":
+		loglvl = slog.LevelWarn
+	case "ERROR":
+		loglvl = slog.LevelError
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: loglvl,
+	}))
 	slog.SetDefault(logger)
 
 	s := app.NewServer()
