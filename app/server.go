@@ -36,7 +36,7 @@ func (s *Server) makeMelody() {
 	m.HandleDisconnect(func(ss *melody.Session) {
 		if ar, exists := ss.Get(ROOM_KEY); exists {
 			r := ar.(*Room)
-			if r.isEmptyOrErr() {
+			if r.isEmptyOrErr(ss) {
 				s.roomMap.del(r.ID)
 				slog.Info("Room is empty. so deleted.", "room_id", r.ID)
 			}

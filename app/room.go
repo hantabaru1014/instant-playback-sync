@@ -64,12 +64,15 @@ func (r *Room) broadcastOthers(msg []byte, s *melody.Session) error {
 	})
 }
 
-func (r *Room) isEmptyOrErr() bool {
+func (r *Room) isEmptyOrErr(exclude *melody.Session) bool {
 	sess, err := r.m.Sessions()
 	if err != nil {
 		return true
 	}
 	for _, s := range sess {
+		if s == exclude {
+			continue
+		}
 		if room, exists := s.Get(ROOM_KEY); exists && room == r {
 			return false
 		}
