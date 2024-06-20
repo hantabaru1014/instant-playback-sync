@@ -2,8 +2,14 @@ package dto
 
 import "encoding/json"
 
+type CmdMsgCommand string
+
+const (
+	CMDMSG_CMD_SYNC = CmdMsgCommand("sync")
+)
+
 type CmdMsg struct {
-	Command string          `json:"cmd"`
+	Command CmdMsgCommand   `json:"cmd"`
 	Payload json.RawMessage `json:"p"`
 }
 

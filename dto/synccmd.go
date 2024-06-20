@@ -2,11 +2,17 @@ package dto
 
 import "encoding/json"
 
+type SyncCmdEvent string
+
+const (
+	SYNCCMD_EVENT_PLAY = SyncCmdEvent("play")
+)
+
 type SyncCmd struct {
-	PageUrl      string  `json:"pageUrl"`
-	Event        string  `json:"event"`
-	CurrentTime  float32 `json:"currentTime"`
-	PlaybackRate float32 `json:"playbackRate"`
+	PageUrl      string       `json:"pageUrl"`
+	Event        SyncCmdEvent `json:"event"`
+	CurrentTime  float32      `json:"currentTime"`
+	PlaybackRate float32      `json:"playbackRate"`
 }
 
 func UnmarshalSyncCmd(data []byte) (*SyncCmd, error) {

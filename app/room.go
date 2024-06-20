@@ -1,7 +1,9 @@
 package app
 
 import (
+	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/hantabaru1014/instant-playback-sync/dto"
 	"github.com/olahol/melody"
@@ -49,12 +51,40 @@ func (rm *roomMap) get(id string) *Room {
 	}
 }
 
+type receivedSyncCmd struct {
+	syncCmd     *dto.SyncCmd
+	received_at time.Time
+}
+
+func newReceivedSyncCmd(syncCmd *dto.SyncCmd) *receivedSyncCmd {
+	return &receivedSyncCmd{
+		syncCmd:     syncCmd,
+		received_at: time.Now(),
+	}
+}
+
+func (rsc *receivedSyncCmd) makeCmdMsgToSend() (*dto.CmdMsg, error) {
+	currentTime := rsc.syncCmd.CurrentTime
+	if rsc.syncCmd.Event == dto.SYNCCMD_EVENT_PLAY {
+		currentTime += (float32(time.Since(rsc.received_at).Seconds()) * rsc.syncCmd.PlaybackRate)
+	}
+	syncCmd := *rsc.syncCmd
+	syncCmd.CurrentTime = currentTime
+	jsonBytes, err := json.Marshal(syncCmd)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.CmdMsg{
+		Command: dto.CMDMSG_CMD_SYNC,
+		Payload: json.RawMessage(string(jsonBytes)),
+	}, nil
+}
+
 type Room struct {
 	ID string
 
 	m              *melody.Melody
-	lastSyncCmdMsg *[]byte
-	lastVideoUrl   *string
+	lastSyncCmdMsg *receivedSyncCmd
 }
 
 func (r *Room) broadcastOthers(msg []byte, s *melody.Session) error {
@@ -81,29 +111,38 @@ func (r *Room) isEmptyOrErr(exclude *melody.Session) bool {
 }
 
 func (r *Room) handleMessage(cmd *dto.CmdMsg, rawMsg []byte, s *melody.Session) {
-	if cmd.Command == "sync" {
-		r.lastSyncCmdMsg = &rawMsg
-
+	if cmd.Command == dto.CMDMSG_CMD_SYNC {
 		syncCmd, err := dto.UnmarshalSyncCmd(cmd.Payload)
 		if err != nil {
 			return
 		}
-		v := syncCmd.PageUrl
-		r.lastVideoUrl = &v
+		r.lastSyncCmdMsg = newReceivedSyncCmd(syncCmd)
 	}
 	r.broadcastOthers(rawMsg, s)
 }
 
 func (r *Room) handleConnect(s *melody.Session) {
 	if r.lastSyncCmdMsg != nil {
-		s.Write(*r.lastSyncCmdMsg)
+		cmd, err := r.lastSyncCmdMsg.makeCmdMsgToSend()
+		if err != nil {
+			return
+		}
+		cmdJson, err := json.Marshal(cmd)
+		if err != nil {
+			return
+		}
+		s.Write(cmdJson)
 	}
 }
 
 func (r *Room) ToDTO() *dto.RoomDTO {
+	var url *string
+	if r.lastSyncCmdMsg != nil {
+		url = &r.lastSyncCmdMsg.syncCmd.PageUrl
+	}
 	d := dto.RoomDTO{
 		ID:       r.ID,
-		VideoUrl: r.lastVideoUrl,
+		VideoUrl: url,
 	}
 	return &d
 }
