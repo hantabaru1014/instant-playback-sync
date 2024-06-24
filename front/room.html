@@ -1,6 +1,18 @@
 <html>
   <head>
+    <meta charset="UTF-8">
     <title>instant-playback-sync</title>
+    <style>
+      .bookmarklet {
+        display: inline-block;
+        border-radius: 5%;
+        text-align: center;
+        cursor: pointer;
+        padding: 10px 10px;
+        background: green;
+        color: white;
+      }
+    </style>
   </head>
   <body>
     <center>
@@ -13,14 +25,20 @@
         <a id="videoUrl" href="" target="_blank"></a>
       </div>
 
-      <div id="bookmarklet">
-        <p>下のブックマークレットをブックマークバーにドラッグして登録ください。そして、動画を開いたタブで実行してください。</p>
-        <a id="bookmarklet-atag" href="">psync-部屋に入る</a>
+      <div style="border: 2px dashed black; padding: 1rem; margin-top: 1rem;">
+        <div id="bookmarklet">
+          <p>下のブックマークレットをブックマークバーにドラッグして登録ください。そして、動画を開いたタブで実行してください。</p>
+          <a id="bookmarklet-atag" href="" class="bookmarklet">psync-動画を接続</a>
+        </div>
+        <div id="bookmarklet2">
+          <p>もしくは、Copyボタンを押してコピーされたテキストを動画を開いたタブのアドレスバーに張り付けて、先頭の「/」を消してエンターしてください。</p>
+          <input id="userScript" type="text">
+          <button id="copyScript">Copy</button>
+        </div>
       </div>
-      <div id="bookmarklet2">
-        <p>もしくは、Copyボタンを押してコピーされたテキストを動画を開いたタブのアドレスバーに張り付けて、先頭の「/」を消してエンターしてください。</p>
-        <input id="userScript" type="text">
-        <button id="copyScript">Copy</button>
+
+      <div id="after1stConnect" style="display: none; margin-top: 1rem;">
+        ↑のブックマークレットを実行したら、このページのURLを一緒に見る人に共有してください。
       </div>
     </center>
 
@@ -40,7 +58,10 @@
         videoUrlElm.innerText = roomInfo.videoUrl;
 
         document.getElementById("videoInfo").style.display = "block";
-      }).catch(console.error);
+      }).catch(err => {
+        console.error(err);
+        document.getElementById("after1stConnect").style.display = "block";
+      });
 
       const userScirptInput = document.getElementById("userScript");
 
@@ -49,7 +70,12 @@
       const scriptText = `javascript:(function()%7Bimport('${scriptUrl}').then(m%3D%3E%20m.default('${window.location.host}','${encodedRoomId}'))%7D)()`;
 
       userScirptInput.value = `/${scriptText}`;
-      document.getElementById("bookmarklet-atag").href = scriptText;
+      const bl = document.getElementById("bookmarklet-atag");
+      bl.href = scriptText;
+      bl.onclick = (e) => {
+        e.preventDefault();
+        alert("これはブックマークレットです。ブックマークバーにドラッグして登録してください。");
+      };
 
       document.getElementById("copyScript").onclick = function () {
         userScirptInput.select();
