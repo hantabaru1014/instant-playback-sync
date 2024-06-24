@@ -110,6 +110,20 @@ func (r *Room) isEmptyOrErr(exclude *melody.Session) bool {
 	return true
 }
 
+func (r *Room) len() int {
+	sess, err := r.m.Sessions()
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, s := range sess {
+		if room, exists := s.Get(ROOM_KEY); exists && room == r {
+			count++
+		}
+	}
+	return count
+}
+
 func (r *Room) handleMessage(cmd *dto.CmdMsg, rawMsg []byte, s *melody.Session) {
 	if cmd.Command == dto.CMDMSG_CMD_SYNC {
 		syncCmd, err := dto.UnmarshalSyncCmd(cmd.Payload)
@@ -126,6 +140,18 @@ func (r *Room) handleConnect(s *melody.Session) {
 		cmd, err := r.lastSyncCmdMsg.makeCmdMsgToSend()
 		if err != nil {
 			return
+		}
+		cmdJson, err := json.Marshal(cmd)
+		if err != nil {
+			return
+		}
+		s.Write(cmdJson)
+	} else if r.len() == 0 {
+		// FIXME: この時点でsのクライアントがRoomに入っている扱いなのかがわかりづらい。
+		// 今回は入っていないのでlen == 0
+		cmd := &dto.CmdMsg{
+			Command: dto.CMDMSG_CMD_REQ_SYNC,
+			Payload: nil,
 		}
 		cmdJson, err := json.Marshal(cmd)
 		if err != nil {

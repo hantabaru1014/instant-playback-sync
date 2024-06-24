@@ -15,9 +15,16 @@ export default (host, roomId) => {
       ws.onmessage = (msg) => {
         log(`Received message: ${msg.data}`);
         const data = JSON.parse(msg.data);
-        if (data.cmd === 'sync') {
-          handleSyncEvent(data);
-          lastReceivedSyncMsgTime = Date.now();
+        switch (data.cmd) {
+          case 'sync':
+            handleSyncEvent(data);
+            lastReceivedSyncMsgTime = Date.now();
+            break;
+          case 'reqSync':
+            sendSyncEvent();
+            break;
+          default:
+            error('Unknown command:', data.cmd);
         }
       }
     }
@@ -49,10 +56,14 @@ export default (host, roomId) => {
       targetMediaElement.playbackRate = playbackRate;
       switch (event) {
         case 'play':
-          targetMediaElement.play();
+          if (targetMediaElement.paused) {
+            targetMediaElement.play();
+          }
           break;
         case 'pause':
-          targetMediaElement.pause();
+          if (!targetMediaElement.paused) {
+            targetMediaElement.pause();
+          }
           break;
         default:
           log('Unknown event type:', event);

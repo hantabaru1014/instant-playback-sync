@@ -5,7 +5,8 @@ import "encoding/json"
 type CmdMsgCommand string
 
 const (
-	CMDMSG_CMD_SYNC = CmdMsgCommand("sync")
+	CMDMSG_CMD_SYNC     = CmdMsgCommand("sync")
+	CMDMSG_CMD_REQ_SYNC = CmdMsgCommand("reqSync")
 )
 
 type CmdMsg struct {
