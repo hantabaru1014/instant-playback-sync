@@ -59,6 +59,8 @@ func (s *Server) makeMelody() {
 
 func (s *Server) Run(address string) {
 	e := echo.New()
+	e.HideBanner = true
+	e.HidePort = true
 	s.makeMelody()
 
 	e.Use(slogecho.NewWithFilters(
