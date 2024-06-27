@@ -103,6 +103,7 @@ export default (host, roomId) => {
     const main = () => {
       targetMediaElement = getMediaElement();
       if (!targetMediaElement) {
+        window.location.href = `https://${host}/r/${roomId}`;
         return;
       }
       setVideoEvents(targetMediaElement);
