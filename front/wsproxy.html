@@ -1,0 +1,55 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>instant-playback-sync</title>
+</head>
+<body>
+
+<p>このページはシステム内部で使用するためのページです。<a href="/">ホームへ</a></p>
+
+<script>
+  let ws = null;
+
+  const postMessage = (cmd) => {
+    window.parent.postMessage(cmd, '*');
+  };
+
+  const sendWSMessage = (cmd) => {
+    ws.send(JSON.stringify(cmd));
+  }
+
+  const connectWS = (wsAddress) => {
+    ws = new WebSocket(wsAddress);
+
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      postMessage(data);
+    }
+
+    ws.onopen = () => {
+      postMessage({
+        cmd: 'iframe:onConnected',
+        p: null
+      });
+    }
+  }
+
+  window.addEventListener('message', (event) => {
+    switch (event.data.cmd) {
+      case 'iframe:connect':
+        connectWS(event.data.p);
+        break;
+      default:
+        sendWSMessage(event.data);
+        break;
+    }
+  });
+
+  postMessage({
+    cmd: 'iframe:onLoadedProxy',
+    p: null
+  });
+</script>
+
+</body>
+</html>

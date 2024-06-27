@@ -3,31 +3,12 @@ export default (host, roomId) => {
     'use strict';
 
     let targetMediaElement = null;
-    let ws = null;
     let lastReceivedSyncMsgTime = null;
+
+    let postMessage = null;
 
     const log = (msg) => console.log(`[instant-playback-sync] ${msg}`);
     const error = (msg) => console.error(`[instant-playback-sync] ${msg}`);
-
-    const connectWS = (wsAddress) => {
-      ws = new WebSocket(wsAddress);
-
-      ws.onmessage = (msg) => {
-        log(`Received message: ${msg.data}`);
-        const data = JSON.parse(msg.data);
-        switch (data.cmd) {
-          case 'sync':
-            handleSyncEvent(data);
-            lastReceivedSyncMsgTime = Date.now();
-            break;
-          case 'reqSync':
-            sendSyncEvent();
-            break;
-          default:
-            error('Unknown command:', data.cmd);
-        }
-      }
-    }
 
     const sendSyncEvent = () => {
       if (Date.now() - lastReceivedSyncMsgTime < 500) {
@@ -35,7 +16,7 @@ export default (host, roomId) => {
         return;
       }
       const eventType = targetMediaElement.paused ? 'pause' : 'play';
-      const msg = {
+      postMessage({
         cmd: 'sync',
         p: {
           pageUrl: window.location.href,
@@ -43,8 +24,7 @@ export default (host, roomId) => {
           currentTime: targetMediaElement.currentTime,
           playbackRate: targetMediaElement.playbackRate,
         }
-      }
-      ws.send(JSON.stringify(msg));
+      });
     }
 
     const handleSyncEvent = (msg) => {
@@ -80,7 +60,7 @@ export default (host, roomId) => {
       }
     }
 
-    const setVideoEvents = (mediaElm) => {
+    const hookVideoEvents = (mediaElm) => {
       mediaElm.addEventListener('play', () => {
         log('Video started playing');
         sendSyncEvent();
@@ -100,14 +80,72 @@ export default (host, roomId) => {
       });
     }
 
-    const main = () => {
+    const createWSProxy = () => {
+      return new Promise((resolve, reject) => {
+        window.addEventListener('message', (event) => {
+          if (event.origin !== `https://${host}`) {
+            return;
+          }
+          switch (event.data.cmd) {
+            case 'iframe:onLoadedProxy':
+              postMessage({
+                cmd: 'iframe:connect',
+                p: `wss://${host}/api/rooms/${roomId}/ws`
+              });
+              break;
+            case 'iframe:onConnected':
+              log('Connected to ws server');
+              resolve();
+              break;
+            default:
+              handleWSMessage(event.data);
+              break;
+          }
+        });
+  
+        const iframe = document.createElement('iframe');
+        iframe.src = `https://${host}/wsproxy`;
+        iframe.style.display = 'none';
+        iframe.id = 'instant-playback-sync-wsproxy';
+  
+        postMessage = (data) => iframe.contentWindow.postMessage(data, `https://${host}`);
+  
+        document.body.appendChild(iframe);
+      });
+    }
+
+    const existsWSProxy = () => {
+      return !!document.getElementById('instant-playback-sync-wsproxy');
+    }
+
+    const handleWSMessage = (data) => {
+      log(`Received message: ${JSON.stringify(data)}`)
+      switch (data.cmd) {
+        case 'sync':
+          handleSyncEvent(data);
+          lastReceivedSyncMsgTime = Date.now();
+          break;
+        case 'reqSync':
+          sendSyncEvent();
+          break;
+        default:
+          error('Unknown command:', data.cmd);
+      }
+    }
+
+    const main = async () => {
+      if (existsWSProxy()){
+        alert('[instant-playback-sync] このページはすでに同期されています。正常に動作していない場合はページをリロードしてから再度お試しください。');
+        return;
+      }
       targetMediaElement = getMediaElement();
       if (!targetMediaElement) {
         window.location.href = `https://${host}/r/${roomId}`;
         return;
       }
-      setVideoEvents(targetMediaElement);
-      connectWS(`wss://${host}/api/rooms/${roomId}/ws`);
+      
+      await createWSProxy();
+      hookVideoEvents(targetMediaElement);
     }
 
     log(`script loaded for room: ${roomId}`);

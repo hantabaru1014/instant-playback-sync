@@ -89,6 +89,9 @@ func (s *Server) Run(address string) {
 	e.GET("/i.js", func(c echo.Context) error {
 		return c.File("front/inject.js")
 	})
+	e.GET("/wsproxy", func(c echo.Context) error {
+		return c.File("front/wsproxy.html")
+	})
 
 	// API
 	e.GET("/api/rooms/:id/ws", s.handleWSRequest)
