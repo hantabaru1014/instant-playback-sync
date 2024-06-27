@@ -70,6 +70,12 @@ func (s *Server) Run(address string) {
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{http.MethodGet},
 	}))
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set(echo.HeaderCacheControl, "no-cache")
+			return next(c)
+		}
+	})
 
 	// アセット配信
 	e.GET("/", func(c echo.Context) error {

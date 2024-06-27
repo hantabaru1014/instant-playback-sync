@@ -65,7 +65,7 @@
 
       const userScirptInput = document.getElementById("userScript");
 
-      const scriptUrl = encodeURI(`${window.location.origin}/i.js?v=2`).replaceAll(':', '%3A').replaceAll('/', '%2F');
+      const scriptUrl = encodeURI(`${window.location.origin}/i.js`).replaceAll(':', '%3A').replaceAll('/', '%2F');
       const encodedRoomId = encodeURI(window.location.pathname.split("/")[2]); // 想定: /r/:roomId
       const scriptText = `javascript:(function()%7Bimport('${scriptUrl}').then(m%3D%3E%20m.default('${window.location.host}','${encodedRoomId}'))%7D)()`;
 
