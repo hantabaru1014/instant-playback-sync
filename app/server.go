@@ -1,8 +1,12 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
 	"github.com/hantabaru1014/instant-playback-sync/dto"
 	"github.com/labstack/echo/v4"
@@ -12,9 +16,8 @@ import (
 )
 
 type Server struct {
-	m              *melody.Melody
-	roomMap        roomMap
-	isShuttingDown bool
+	m       *melody.Melody
+	roomMap roomMap
 }
 
 func NewServer() *Server {
@@ -65,7 +68,7 @@ func (s *Server) Run(address string) {
 
 	e.Use(slogecho.NewWithFilters(
 		slog.Default(),
-		slogecho.IgnorePath("/live", "/ready"), // k8s liveness and readiness probes
+		slogecho.IgnorePath("/live"), // k8s liveness and readiness probes
 	))
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
@@ -101,15 +104,29 @@ func (s *Server) Run(address string) {
 	e.GET("/live", func(c echo.Context) error {
 		return c.String(http.StatusOK, "OK")
 	})
-	e.GET("/ready", func(c echo.Context) error {
-		if s.isShuttingDown {
-			return c.String(http.StatusServiceUnavailable, "Shutting down")
-		} else {
-			return c.String(http.StatusOK, "OK")
-		}
-	})
 
-	slog.Error("Fatal error on run server", e.Start(address))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	go func() {
+		if err := e.Start(address); err != nil && err != http.ErrServerClosed {
+			slog.Error("Fatal error on run server", err)
+		}
+	}()
+
+	<-ctx.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	slog.Info("Signal interrupt. Shutting down server...")
+	s.shutdownRooms()
+	if err := e.Shutdown(ctx); err != nil {
+		slog.Error("Fatal error on shutdown server", err)
+	}
+}
+
+func (s *Server) shutdownRooms() {
+	if s.m != nil {
+		s.m.CloseWithMsg(melody.FormatCloseMessage(1001, "Server is shutting down"))
+	}
 }
 
 func (s *Server) handleWSRequest(c echo.Context) error {

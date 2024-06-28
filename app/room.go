@@ -44,6 +44,9 @@ func (rm *roomMap) getOrAdd(id string, m *melody.Melody) *Room {
 }
 
 func (rm *roomMap) get(id string) *Room {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
 	if r, ok := rm.rooms[id]; ok {
 		return r
 	} else {

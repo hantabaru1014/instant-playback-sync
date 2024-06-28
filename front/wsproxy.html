@@ -33,11 +33,17 @@
       });
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       postMessage({
         cmd: 'iframe:onDisconnected',
         p: null
       });
+      // Graceful shutdownの場合は既に別Podがいる場合があるので再接続する
+      if (event.code === 1001 && event.reason === 'Server is shutting down'){
+        setTimeout(() => {
+          connectWS(wsAddress);
+        }, 1000);
+      }
     }
 
     ws.onerror = (err) => {
