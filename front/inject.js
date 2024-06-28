@@ -57,8 +57,18 @@ export default (host, roomId) => {
       if (elms.length === 0) {
         error('No video element found');
         return null;
-      }else{
+      } else if (elms.length === 1){
         return elms[0];
+      } else {
+        let longestDuration = 0;
+        let longestDurationElm = null;
+        for (const v of elms) {
+          if (v.duration > longestDuration) {
+            longestDuration = v.duration;
+            longestDurationElm = v;
+          }
+        }
+        return longestDurationElm;
       }
     }
 
