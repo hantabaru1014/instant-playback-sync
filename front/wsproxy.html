@@ -32,6 +32,20 @@
         p: null
       });
     }
+
+    ws.onclose = () => {
+      postMessage({
+        cmd: 'iframe:onDisconnected',
+        p: null
+      });
+    }
+
+    ws.onerror = (err) => {
+      postMessage({
+        cmd: 'iframe:onError',
+        p: err
+      });
+    }
   }
 
   window.addEventListener('message', (event) => {

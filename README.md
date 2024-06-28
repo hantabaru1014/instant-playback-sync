@@ -32,7 +32,6 @@ LOG_LEVEL=DEBUG go run main.go
 # TODO
 他の人に使ってもらうまでにやらないといけない最低限のやつ (TODO: これが終わって以降はissue/projectとかで管理すべき)
 
-- ちゃんと接続されたことがわかるように「同期OK」的な表示を画面端に出す
 - フロントをsvelteでまともなやつにする
     - 使い方の説明を書く
 - bookmarkletもTSで開発できるようにする

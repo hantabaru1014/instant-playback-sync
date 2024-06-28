@@ -3,6 +3,8 @@ export default (host, roomId) => {
     'use strict';
 
     let targetMediaElement = null;
+    let statusLabel = null;
+
     let lastReceivedSyncMsgTime = null;
 
     let postMessage = null;
@@ -82,6 +84,7 @@ export default (host, roomId) => {
 
     const createWSProxy = () => {
       return new Promise((resolve, reject) => {
+        updateStatusLabel('接続中...', 'orange');
         window.addEventListener('message', (event) => {
           if (event.origin !== `https://${host}`) {
             return;
@@ -95,7 +98,13 @@ export default (host, roomId) => {
               break;
             case 'iframe:onConnected':
               log('Connected to ws server');
+              updateStatusLabel('OK', 'green');
               resolve();
+              break;
+            case 'iframe:onDisconnected':
+            case 'iframe:onError':
+              error('Disconnected from ws server');
+              updateStatusLabel('同期エラー. 再接続してください!', 'red');
               break;
             default:
               handleWSMessage(event.data);
@@ -133,6 +142,24 @@ export default (host, roomId) => {
       }
     }
 
+    const createStatusLabel = (mediaElm) => {
+      const label = document.createElement('div');
+      label.id = 'instant-playback-sync-status-label';
+      label.style.position = 'absolute';
+      label.style.zIndex = 9999;
+      label.style.left = '10px';
+      label.style.top = '10px';
+
+      mediaElm.parentElement.appendChild(label);
+      statusLabel = label;
+    }
+
+    const updateStatusLabel = (msg, color) => {
+      if (!statusLabel) return;
+      statusLabel.innerText = msg;
+      statusLabel.style.color = color;
+    }
+
     const main = async () => {
       if (existsWSProxy()){
         alert('[instant-playback-sync] このページはすでに同期されています。正常に動作していない場合はページをリロードしてから再度お試しください。');
@@ -143,6 +170,7 @@ export default (host, roomId) => {
         window.location.href = `https://${host}/r/${roomId}`;
         return;
       }
+      createStatusLabel(targetMediaElement);
       
       await createWSProxy();
       hookVideoEvents(targetMediaElement);
