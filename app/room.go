@@ -113,20 +113,6 @@ func (r *Room) isEmptyOrErr(exclude *melody.Session) bool {
 	return true
 }
 
-func (r *Room) len() int {
-	sess, err := r.m.Sessions()
-	if err != nil {
-		return 0
-	}
-	count := 0
-	for _, s := range sess {
-		if room, exists := s.Get(ROOM_KEY); exists && room == r {
-			count++
-		}
-	}
-	return count
-}
-
 func (r *Room) handleMessage(cmd *dto.CmdMsg, rawMsg []byte, s *melody.Session) {
 	if cmd.Command == dto.CMDMSG_CMD_SYNC {
 		syncCmd, err := dto.UnmarshalSyncCmd(cmd.Payload)
@@ -149,9 +135,7 @@ func (r *Room) handleConnect(s *melody.Session) {
 			return
 		}
 		s.Write(cmdJson)
-	} else if r.len() == 0 {
-		// FIXME: この時点でsのクライアントがRoomに入っている扱いなのかがわかりづらい。
-		// 今回は入っていないのでlen == 0
+	} else {
 		cmd := &dto.CmdMsg{
 			Command: dto.CMDMSG_CMD_REQ_SYNC,
 			Payload: nil,
@@ -164,12 +148,12 @@ func (r *Room) handleConnect(s *melody.Session) {
 	}
 }
 
-func (r *Room) ToDTO() *dto.RoomDTO {
+func (r *Room) ToDTO() *dto.Room {
 	var url *string
 	if r.lastSyncCmdMsg != nil {
 		url = &r.lastSyncCmdMsg.syncCmd.PageUrl
 	}
-	d := dto.RoomDTO{
+	d := dto.Room{
 		ID:       r.ID,
 		VideoUrl: url,
 	}

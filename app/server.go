@@ -30,7 +30,6 @@ func (s *Server) makeMelody() {
 	m := melody.New()
 
 	m.HandleConnect(func(ss *melody.Session) {
-		slog.Info("WS Client Connected", "address", ss.Request.RemoteAddr)
 		if ar, exists := ss.Get(ROOM_KEY); exists {
 			r := ar.(*Room)
 			r.handleConnect(ss)
@@ -44,7 +43,6 @@ func (s *Server) makeMelody() {
 				slog.Info("Room is empty. so deleted.", "room_id", r.ID)
 			}
 		}
-		slog.Info("WS Client Disconnected", "address", ss.Request.RemoteAddr)
 	})
 	m.HandleMessage(func(ss *melody.Session, msg []byte) {
 		cmd, err := dto.UnmarshalCmdMsg(msg)
@@ -139,7 +137,7 @@ func (s *Server) handleWSRequest(c echo.Context) error {
 	reqLog := map[string]interface{}{
 		"path":    req.URL.Path,
 		"query":   req.URL.Query(),
-		"ip":      req.RemoteAddr,
+		"ip":      c.RealIP(),
 		"referer": req.Referer(),
 	}
 	slog.Info("handleWSRequest", "room_id", id, "request", reqLog)
