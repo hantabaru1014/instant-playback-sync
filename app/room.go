@@ -2,57 +2,13 @@ package app
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/hantabaru1014/instant-playback-sync/dto"
-	"github.com/olahol/melody"
 )
-
-type roomMap struct {
-	mu    sync.RWMutex
-	rooms map[string]*Room
-}
-
-func newRoomMap() *roomMap {
-	return &roomMap{
-		rooms: make(map[string]*Room),
-	}
-}
-
-func (rm *roomMap) del(id string) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	delete(rm.rooms, id)
-}
-
-func (rm *roomMap) getOrAdd(id string, m *melody.Melody) *Room {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	if r, ok := rm.rooms[id]; ok {
-		return r
-	}
-
-	r := &Room{
-		ID: id,
-		m:  m,
-	}
-	rm.rooms[id] = r
-	return r
-}
-
-func (rm *roomMap) get(id string) *Room {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	if r, ok := rm.rooms[id]; ok {
-		return r
-	} else {
-		return nil
-	}
-}
 
 type receivedSyncCmd struct {
 	syncCmd     *dto.SyncCmd
@@ -83,37 +39,99 @@ func (rsc *receivedSyncCmd) makeCmdMsgToSend() (*dto.CmdMsg, error) {
 	}, nil
 }
 
+type sessionSet struct {
+	mu       sync.RWMutex
+	sessions map[*Session]struct{}
+}
+
+func (ss *sessionSet) add(s *Session) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	ss.sessions[s] = struct{}{}
+}
+
+func (ss *sessionSet) del(s *Session) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	delete(ss.sessions, s)
+}
+
+func (ss *sessionSet) clear() {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	ss.sessions = make(map[*Session]struct{})
+}
+
+func (ss *sessionSet) each(cb func(*Session)) {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+
+	for s := range ss.sessions {
+		cb(s)
+	}
+}
+
+func (ss *sessionSet) all() []*Session {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+
+	sessions := make([]*Session, 0, len(ss.sessions))
+	for s := range ss.sessions {
+		sessions = append(sessions, s)
+	}
+	return sessions
+}
+
+func (ss *sessionSet) len() int {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+
+	return len(ss.sessions)
+}
+
+type broadcastPacket struct {
+	msg     msgPacket
+	exclude *Session
+}
+
 type Room struct {
 	ID string
 
-	m              *melody.Melody
+	server     *Server
+	sessions   sessionSet
+	broadcast  chan broadcastPacket
+	register   chan *Session
+	unregister chan *Session
+	shutdown   chan []byte
+
 	lastSyncCmdMsg *receivedSyncCmd
 }
 
-func (r *Room) broadcastOthers(msg []byte, s *melody.Session) error {
-	return r.m.BroadcastFilter(msg, func(ss *melody.Session) bool {
-		room, exists := ss.Get(ROOM_KEY)
-		return exists && room == r && ss != s
-	})
+func NewRoom(id string, s *Server) *Room {
+	return &Room{
+		ID:         id,
+		server:     s,
+		sessions:   sessionSet{sessions: make(map[*Session]struct{})},
+		broadcast:  make(chan broadcastPacket),
+		register:   make(chan *Session),
+		unregister: make(chan *Session),
+		shutdown:   make(chan []byte),
+	}
 }
 
-func (r *Room) isEmptyOrErr(exclude *melody.Session) bool {
-	sess, err := r.m.Sessions()
+func (r *Room) broadcastOthers(msg []byte, s *Session) {
+	r.broadcast <- broadcastPacket{msg: msgPacket{t: websocket.TextMessage, msg: msg}, exclude: s}
+}
+
+func (r *Room) handleMessage(msg []byte, s *Session) {
+	slog.Debug("handle WS message", "msg", string(msg))
+	cmd, err := dto.UnmarshalCmdMsg(msg)
 	if err != nil {
-		return true
+		return
 	}
-	for _, s := range sess {
-		if s == exclude {
-			continue
-		}
-		if room, exists := s.Get(ROOM_KEY); exists && room == r {
-			return false
-		}
-	}
-	return true
-}
-
-func (r *Room) handleMessage(cmd *dto.CmdMsg, rawMsg []byte, s *melody.Session) {
 	if cmd.Command == dto.CMDMSG_CMD_SYNC {
 		syncCmd, err := dto.UnmarshalSyncCmd(cmd.Payload)
 		if err != nil {
@@ -121,10 +139,10 @@ func (r *Room) handleMessage(cmd *dto.CmdMsg, rawMsg []byte, s *melody.Session) 
 		}
 		r.lastSyncCmdMsg = newReceivedSyncCmd(syncCmd)
 	}
-	r.broadcastOthers(rawMsg, s)
+	r.broadcastOthers(msg, s)
 }
 
-func (r *Room) handleConnect(s *melody.Session) {
+func (r *Room) handleConnect(s *Session) {
 	if r.lastSyncCmdMsg != nil {
 		cmd, err := r.lastSyncCmdMsg.makeCmdMsgToSend()
 		if err != nil {
@@ -134,7 +152,7 @@ func (r *Room) handleConnect(s *melody.Session) {
 		if err != nil {
 			return
 		}
-		s.Write(cmdJson)
+		s.Send(cmdJson)
 	} else {
 		cmd := &dto.CmdMsg{
 			Command: dto.CMDMSG_CMD_REQ_SYNC,
@@ -144,8 +162,76 @@ func (r *Room) handleConnect(s *melody.Session) {
 		if err != nil {
 			return
 		}
-		s.Write(cmdJson)
+		s.Send(cmdJson)
 	}
+}
+
+func (r *Room) handleDisconnect(s *Session) {
+}
+
+// handleSessionError はWSセッションが致命的なエラーを起こして機能しなくなったときに呼ばれる
+func (r *Room) handleSessionError(s *Session, err error) {
+	slog.Info("Session error", "room_id", r.ID, "session_id", s.ID, "error", err)
+}
+
+func (r *Room) run() {
+loop:
+	for {
+		select {
+		case s := <-r.register:
+			r.sessions.add(s)
+		case s := <-r.unregister:
+			r.sessions.del(s)
+		case m := <-r.broadcast:
+			r.sessions.each(func(s *Session) {
+				if s != m.exclude {
+					s.sendMsg(m.msg)
+				}
+			})
+		case m := <-r.shutdown:
+			r.sessions.each(func(s *Session) {
+				s.CloseWithMsg(m)
+			})
+			r.sessions.clear()
+
+			break loop
+		}
+	}
+}
+
+func (r *Room) handleRequest(conn *websocket.Conn, id string) error {
+	s := &Session{
+		ID:         id,
+		room:       r,
+		conn:       conn,
+		output:     make(chan msgPacket, r.server.Config.WSMessageSendBufferSize),
+		outputDone: make(chan struct{}),
+		opened:     true,
+		rwmutex:    &sync.RWMutex{},
+	}
+	r.register <- s
+	r.handleConnect(s)
+
+	go s.writePump()
+	s.readPump()
+
+	r.unregister <- s
+	s.close()
+	r.handleDisconnect(s)
+
+	return nil
+}
+
+func (r *Room) all() []*Session {
+	return r.sessions.all()
+}
+
+func (r *Room) Shutdown(msg []byte) {
+	r.shutdown <- msg
+}
+
+func (r *Room) Len() int {
+	return r.sessions.len()
 }
 
 func (r *Room) ToDTO() *dto.Room {

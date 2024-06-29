@@ -8,61 +8,37 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/hantabaru1014/instant-playback-sync/dto"
+	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/olahol/melody"
+	"github.com/rs/xid"
 	slogecho "github.com/samber/slog-echo"
 )
 
 type Server struct {
-	m       *melody.Melody
-	roomMap roomMap
+	Config *Config
+
+	upgrader *websocket.Upgrader
+	roomMap  roomMap
 }
 
-func NewServer() *Server {
-	return &Server{
-		roomMap: *newRoomMap(),
+func NewServer(config *Config) *Server {
+	upgrader := &websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
-}
-
-func (s *Server) makeMelody() {
-	m := melody.New()
-
-	m.HandleConnect(func(ss *melody.Session) {
-		if ar, exists := ss.Get(ROOM_KEY); exists {
-			r := ar.(*Room)
-			r.handleConnect(ss)
-		}
-	})
-	m.HandleDisconnect(func(ss *melody.Session) {
-		if ar, exists := ss.Get(ROOM_KEY); exists {
-			r := ar.(*Room)
-			if r.isEmptyOrErr(ss) {
-				s.roomMap.del(r.ID)
-				slog.Info("Room is empty. so deleted.", "room_id", r.ID)
-			}
-		}
-	})
-	m.HandleMessage(func(ss *melody.Session, msg []byte) {
-		cmd, err := dto.UnmarshalCmdMsg(msg)
-		if err != nil {
-			return
-		}
-		slog.Debug("handle WS message", "msg", string(msg))
-		if ar, exists := ss.Get(ROOM_KEY); exists {
-			r := ar.(*Room)
-			r.handleMessage(cmd, msg, ss)
-		}
-	})
-	s.m = m
+	return &Server{
+		Config:   config,
+		upgrader: upgrader,
+		roomMap:  *newRoomMap(),
+	}
 }
 
 func (s *Server) Run(address string) {
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-	s.makeMelody()
 
 	e.Use(slogecho.NewWithFilters(
 		slog.Default(),
@@ -122,27 +98,58 @@ func (s *Server) Run(address string) {
 }
 
 func (s *Server) shutdownRooms() {
-	if s.m != nil {
-		s.m.CloseWithMsg(melody.FormatCloseMessage(1001, "Server is shutting down"))
-	}
+	s.roomMap.each(func(r *Room) {
+		r.Shutdown(websocket.FormatCloseMessage(1001, "Server is shutting down"))
+	})
 }
 
 func (s *Server) handleWSRequest(c echo.Context) error {
 	id := c.Param("id")
-	r := s.roomMap.getOrAdd(id, s.m)
-	keys := map[string]interface{}{
-		ROOM_KEY: r,
+	if id == "" || len(id) > 32 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid room id"})
 	}
+
+	respWriter := c.Response().Writer
+	conn, err := s.upgrader.Upgrade(respWriter, c.Request(), respWriter.Header())
+	if err != nil {
+		return err
+	}
+
+	r := s.roomMap.get(id)
+	if r == nil {
+		r = NewRoom(id, s)
+		s.roomMap.add(r)
+		go r.run()
+	}
+
 	req := c.Request()
+	sessionId := xid.New().String()
 	reqLog := map[string]interface{}{
 		"path":    req.URL.Path,
 		"query":   req.URL.Query(),
 		"ip":      c.RealIP(),
 		"referer": req.Referer(),
 	}
-	slog.Info("handleWSRequest", "room_id", id, "request", reqLog)
-	s.m.HandleRequestWithKeys(c.Response().Writer, c.Request(), keys)
-	return nil
+	slog.Info("New WSRequest", "room_id", id, "session_id", sessionId, "request", reqLog)
+
+	err = r.handleRequest(conn, sessionId)
+
+	func() {
+		rlen := r.Len()
+		if rlen > 1 {
+			return
+		}
+		if rlen == 1 {
+			if ss := r.all(); len(ss) != 1 || ss[0].ID != sessionId {
+				return
+			}
+		}
+		s.roomMap.del(id)
+		r.Shutdown([]byte{})
+		slog.Info("Room is empty. so deleted.", "room_id", id)
+	}()
+
+	return err
 }
 
 func (s *Server) handleGetRooms(c echo.Context) error {

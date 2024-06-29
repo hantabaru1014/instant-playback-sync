@@ -24,6 +24,7 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	s := app.NewServer()
+	c := app.NewConfig()
+	s := app.NewServer(c)
 	s.Run(":8080")
 }
