@@ -38,7 +38,7 @@ export default (host, roomId) => {
 
     const getPageUrl = () => {
       if (window.location.host.match(/amazon/)) {
-        bidMatch = window.location.pathname.match(/\/B[0-9A-Z]{9,}/);
+        const bidMatch = window.location.pathname.match(/\/B[0-9A-Z]{9,}/);
         if (bidMatch) {
           return `https://${window.location.host}/dp${bidMatch[0]}?autoplay=1`;
         } else {
