@@ -12,6 +12,47 @@ export default (host, roomId) => {
     const log = (msg) => console.log(`[instant-playback-sync] ${msg}`);
     const error = (msg) => console.error(`[instant-playback-sync] ${msg}`);
 
+    // Bから始まる10桁のIDが含まれていないURLだった場合に amzn1.dv.gti.9eae2d28-8f94-c369-088d-84d7216a0afe みたいなIDを取得する
+    const findPrimeVideoId = () => {
+      try {
+        const titleElm = document.querySelector(".atvwebplayersdk-title-text");
+        if (titleElm == null) return null;
+        const keys = Object.keys(titleElm);
+        let key = null;
+        for (let i = 0; i < keys.length; i++) {
+          if (keys[i].startsWith("__reactInternalInstance")) {
+            key = keys[i];
+            break;
+          }
+        }
+        const foundId = titleElm[key].return.return.stateNode.context.stores.pin.currentTitleId;
+        if (foundId.match(/dv\.gti/)) {
+          return foundId;
+        } else {
+          return null;
+        }
+      } catch (e) {
+        return null;
+      }
+    }
+
+    const getPageUrl = () => {
+      if (window.location.host.match(/amazon/)) {
+        bidMatch = window.location.pathname.match(/\/B[0-9A-Z]{9,}/);
+        if (bidMatch) {
+          return `https://${window.location.host}/dp${bidMatch[0]}?autoplay=1`;
+        } else {
+          const gtiId = findPrimeVideoId();
+          if (gtiId) {
+            return `https://${window.location.host}/gp/video/detail?gti=${gtiId}&autoplay=1`;
+          } else {
+            return '(非対応のPrimeVideo URLです。同期自体はできるので共有ボタン等からURLを手動で共有してください。)'
+          }
+        }
+      }
+      return window.location.href;
+    }
+
     const sendSyncEvent = () => {
       if (Date.now() - lastReceivedSyncMsgTime < 500) {
         // たぶん送られてきたsync cmdによる再生制御なので、送信しない
@@ -21,7 +62,7 @@ export default (host, roomId) => {
       postMessage({
         cmd: 'sync',
         p: {
-          pageUrl: window.location.href,
+          pageUrl: getPageUrl(),
           event: eventType,
           currentTime: targetMediaElement.currentTime,
           playbackRate: targetMediaElement.playbackRate,
