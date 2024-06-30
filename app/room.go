@@ -185,6 +185,9 @@ func (r *Room) handleSessionError(s *Session, err error) {
 }
 
 func (r *Room) sendReqSync() {
+	if time.Since(r.lastSyncCmdMsg.received_at) < r.server.Config.SyncInterval {
+		return
+	}
 	s := r.sessions.getOne()
 	if s != nil {
 		cmd := &dto.CmdMsg{
