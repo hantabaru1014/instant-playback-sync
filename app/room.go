@@ -85,6 +85,16 @@ func (ss *sessionSet) all() []*Session {
 	return sessions
 }
 
+func (ss *sessionSet) getOne() *Session {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+
+	for s := range ss.sessions {
+		return s
+	}
+	return nil
+}
+
 func (ss *sessionSet) len() int {
 	ss.mu.RLock()
 	defer ss.mu.RUnlock()
@@ -174,7 +184,25 @@ func (r *Room) handleSessionError(s *Session, err error) {
 	slog.Info("Session error", "room_id", r.ID, "session_id", s.ID, "error", err)
 }
 
+func (r *Room) sendReqSync() {
+	s := r.sessions.getOne()
+	if s != nil {
+		cmd := &dto.CmdMsg{
+			Command: dto.CMDMSG_CMD_REQ_SYNC,
+			Payload: nil,
+		}
+		cmdJson, err := json.Marshal(cmd)
+		if err != nil {
+			return
+		}
+		s.Send(cmdJson)
+	}
+}
+
 func (r *Room) run() {
+	ticker := time.NewTicker(r.server.Config.SyncInterval)
+	defer ticker.Stop()
+
 loop:
 	for {
 		select {
@@ -195,6 +223,8 @@ loop:
 			r.sessions.clear()
 
 			break loop
+		case <-ticker.C:
+			r.sendReqSync()
 		}
 	}
 }
