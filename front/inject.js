@@ -38,16 +38,11 @@ export default (host, roomId) => {
 
     const getPageUrl = () => {
       if (window.location.host.match(/amazon/)) {
-        const bidMatch = window.location.pathname.match(/\/B[0-9A-Z]{9,}/);
-        if (bidMatch) {
-          return `https://${window.location.host}/dp${bidMatch[0]}?autoplay=1`;
+        const gtiId = findPrimeVideoId();
+        if (gtiId) {
+          return `https://${window.location.host}/gp/video/detail?gti=${gtiId}&autoplay=1`;
         } else {
-          const gtiId = findPrimeVideoId();
-          if (gtiId) {
-            return `https://${window.location.host}/gp/video/detail?gti=${gtiId}&autoplay=1`;
-          } else {
-            return '(非対応のPrimeVideo URLです。同期自体はできるので共有ボタン等からURLを手動で共有してください。)'
-          }
+          return '(非対応のPrimeVideo URLです。同期自体はできるので共有ボタン等からURLを手動で共有してください。)'
         }
       }
       return window.location.href;
